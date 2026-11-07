@@ -1,0 +1,13 @@
+{
+  "domain": "hydroqc_mfa",
+  "name": "Hydro-Québec MFA",
+  "after_dependencies": ["hydroqc"],
+  "codeowners": ["@cesbron-dev"],
+  "config_flow": true,
+  "documentation": "https://github.com/cesbron-dev/ha-hydroqc-mfa",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/cesbron-dev/ha-hydroqc-mfa/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
