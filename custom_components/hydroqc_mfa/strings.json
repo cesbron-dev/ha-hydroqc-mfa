@@ -42,5 +42,27 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "last_renewal": {
+        "name": "Last renewal"
+      },
+      "last_attempt": {
+        "name": "Last attempt",
+        "state": {
+          "success": "Success",
+          "code_timeout": "Code not received in 10 minutes",
+          "password_rejected": "Hydro-Québec password rejected",
+          "code_rejected": "Code rejected",
+          "gmail_unavailable": "Gmail unreachable",
+          "gmail_auth_failed": "Gmail sign-in rejected",
+          "ambiguous": "Several different codes received",
+          "unexpected_form": "Unexpected hydroqc form",
+          "interrupted": "Attempt interrupted (restart)",
+          "unexpected": "Unexpected error"
+        }
+      }
+    }
   }
 }

@@ -42,5 +42,27 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "last_renewal": {
+        "name": "Dernier renouvellement"
+      },
+      "last_attempt": {
+        "name": "Dernière tentative",
+        "state": {
+          "success": "Succès",
+          "code_timeout": "Code non reçu en 10 minutes",
+          "password_rejected": "Mot de passe Hydro-Québec refusé",
+          "code_rejected": "Code refusé",
+          "gmail_unavailable": "Gmail inaccessible",
+          "gmail_auth_failed": "Connexion Gmail refusée",
+          "ambiguous": "Plusieurs codes différents reçus",
+          "unexpected_form": "Formulaire hydroqc inattendu",
+          "interrupted": "Tentative interrompue (redémarrage)",
+          "unexpected": "Erreur inattendue"
+        }
+      }
+    }
   }
 }
