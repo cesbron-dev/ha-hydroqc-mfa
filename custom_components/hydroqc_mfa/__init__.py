@@ -25,7 +25,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: HydroqcMfaConfigEntry) -
     renewer = Renewer(hass, entry, RenewalLock(hass), inbox_factory)
     entry.runtime_data = renewer
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    await renewer.async_start()
+    try:
+        await renewer.async_start()
+    except BaseException:
+        # Pas de minuterie ni de surveillance orpheline : sinon un second
+        # renouveleur coexisterait avec celui d'une prochaine configuration.
+        await renewer.async_stop()
+        await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+        raise
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
 
