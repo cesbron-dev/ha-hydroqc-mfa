@@ -105,7 +105,8 @@ class HydroqcMfaConfigFlow(ConfigFlow, domain=DOMAIN):
                 user_input[CONF_GMAIL_USERNAME], user_input[CONF_GMAIL_APP_PASSWORD]
             )
             if error is None:
-                return self.async_update_reload_and_abort(
+                # Le listener de mise à jour (voir __init__) recharge l'entrée.
+                return self.async_update_and_abort(
                     entry,
                     data_updates={
                         CONF_GMAIL_USERNAME: user_input[CONF_GMAIL_USERNAME],

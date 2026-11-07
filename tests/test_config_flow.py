@@ -6,6 +6,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components import hydroqc_mfa
 from custom_components.hydroqc_mfa.const import (
     CONF_GMAIL_APP_PASSWORD,
     CONF_GMAIL_USERNAME,
@@ -141,6 +142,34 @@ async def test_reconfigure_updates_password(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert entry.data[CONF_GMAIL_APP_PASSWORD] == new[CONF_GMAIL_APP_PASSWORD]
+
+
+async def test_reconfigure_loaded_entry_reloads_once(hass: HomeAssistant, caplog) -> None:
+    """Le listener de mise à jour recharge ; le flux ne recharge pas une seconde fois."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    real_setup = hydroqc_mfa.async_setup_entry
+    setups: list[str] = []
+
+    async def counting_setup(hass_: HomeAssistant, entry_) -> bool:
+        setups.append(entry_.entry_id)
+        return await real_setup(hass_, entry_)
+
+    new = {**USER_INPUT, CONF_GMAIL_APP_PASSWORD: "wxyz wxyz wxyz wxyz"}
+    with patch(VALIDATE, return_value=None), patch(SETUP, side_effect=counting_setup):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        assert len(setups) == 1
+        result = await entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], new)
+        await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert len(setups) == 2
+    assert entry.data[CONF_GMAIL_APP_PASSWORD] == new[CONF_GMAIL_APP_PASSWORD]
+    assert "update listener" not in caplog.text
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
 
 
 async def test_reconfigure_bad_password(hass: HomeAssistant) -> None:
