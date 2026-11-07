@@ -27,13 +27,15 @@ async def test_failure_creates_persistent_and_push(hass):
     assert data["title"] == "Hydro-Québec : réauthentification à faire"
     assert REASON_MESSAGES["code_timeout"] in data["message"]
     assert LINK in data["message"]
-    assert data["data"] == {"url": LINK}
+    # `url` pour iOS, `clickAction` pour Android.
+    assert data["data"] == {"url": LINK, "clickAction": LINK}
+    assert "[" not in data["message"]
 
     note = _persistent(hass)[NOTIFICATION_ID]
     assert note["title"] == "Hydro-Québec : réauthentification à faire"
     assert REASON_MESSAGES["code_timeout"] in note["message"]
     assert "Termine la réauthentification à la main :" in note["message"]
-    assert LINK in note["message"]
+    assert f"[Appareils et services → Hydro-Québec]({LINK})" in note["message"]
 
 
 async def test_failure_without_push_service(hass):

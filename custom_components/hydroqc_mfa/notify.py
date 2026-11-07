@@ -14,6 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 NOTIFICATION_ID = "hydroqc_mfa_failure"
 TITLE = "Hydro-Québec : réauthentification à faire"
 LINK = "/config/integrations/integration/hydroqc"
+LINK_LABEL = "Appareils et services → Hydro-Québec"
 
 
 async def async_notify_failure(
@@ -21,9 +22,11 @@ async def async_notify_failure(
 ) -> None:
     """Alerte Olivier : notification persistante et push optionnel."""
     text = REASON_MESSAGES.get(reason, REASON_MESSAGES["unexpected"])
-    message = f"{text}. Termine la réauthentification à la main : {LINK}"
     persistent_notification.async_create(
-        hass, message, title=TITLE, notification_id=NOTIFICATION_ID
+        hass,
+        f"{text}. Termine la réauthentification à la main : [{LINK_LABEL}]({LINK})",
+        title=TITLE,
+        notification_id=NOTIFICATION_ID,
     )
     if not notify_service:
         return
@@ -32,7 +35,13 @@ async def async_notify_failure(
         await hass.services.async_call(
             domain,
             service,
-            {"title": TITLE, "message": message, "data": {"url": LINK}},
+            {
+                "title": TITLE,
+                # Texte brut : le push n'affiche pas le Markdown ; le toucher ouvre LINK.
+                "message": f"{text}. Termine la réauthentification à la main : {LINK}",
+                # `url` pour iOS, `clickAction` pour Android.
+                "data": {"url": LINK, "clickAction": LINK},
+            },
             blocking=True,
         )
     except Exception:  # noqa: BLE001 - jamais de détail dans les journaux
