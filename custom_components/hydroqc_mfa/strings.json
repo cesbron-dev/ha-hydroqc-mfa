@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Hydro-Québec MFA",
+        "description": "Gmail account that receives the Hydro-Québec verification code. Use a Google app password (IMAP must be enabled), never your regular password.",
+        "data": {
+          "gmail_username": "Gmail address",
+          "gmail_app_password": "App password"
+        }
+      },
+      "reconfigure": {
+        "title": "Update Gmail access",
+        "description": "Enter the new Google app password.",
+        "data": {
+          "gmail_username": "Gmail address",
+          "gmail_app_password": "App password"
+        }
+      }
+    },
+    "error": {
+      "gmail_auth_failed": "Gmail rejected the sign-in. Check the address and the app password.",
+      "gmail_unavailable": "Gmail is unreachable. Try again later."
+    },
+    "abort": {
+      "already_configured": "Hydro-Québec MFA is already configured.",
+      "single_instance_allowed": "Only one Hydro-Québec MFA entry is allowed.",
+      "reconfigure_successful": "Gmail access updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hydro-Québec MFA options",
+        "data": {
+          "notify_service": "Notification service (optional)",
+          "trash_used_email": "Move the used e-mail to the trash",
+          "paused": "Pause automatic renewal"
+        },
+        "data_description": {
+          "notify_service": "Mobile app service notified when a renewal fails."
+        }
+      }
+    }
+  }
+}
