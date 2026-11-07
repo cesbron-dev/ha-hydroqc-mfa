@@ -130,7 +130,8 @@ async def test_success_submits_password_then_code(
     assert results == ["success"]
     assert behavior.passwords == [HQ_PASSWORD]
     assert behavior.codes == [HQ_CODE]
-    assert _lock_state(hass_storage, hydro.entry_id)["state"] == "armed"
+    # Pas de réarmement tant que l'entrée hydroqc n'est pas revenue à LOADED.
+    assert _lock_state(hass_storage, hydro.entry_id)["state"] == "succeeded"
     assert any(c.startswith("STORE") and "\\Trash" in c for c in imap.commands)
     assert imap.logged_out
     assert not hass.config_entries.flow.async_progress_by_handler("hydroqc")
@@ -331,6 +332,70 @@ async def test_rearm_on_loaded(
     assert behavior.passwords == [HQ_PASSWORD, HQ_PASSWORD]
 
 
+async def test_success_then_reauth_on_reload_no_second_attempt(
+    hass, hydro, behavior, imap, make_renewer, results, hass_storage
+):
+    _mail_on_password(behavior, imap)
+    flow_id = await async_open_reauth(hass, hydro)
+    renewer = make_renewer()
+    await renewer.async_start()
+    await _settle(hass)
+    assert results == ["success"]
+    assert not _notified(hass)
+    assert not any(f["flow_id"] == flow_id for f in hass.config_entries.flow.async_progress())
+
+    # Le rechargement qui suit le succès échoue : ConfigEntryAuthFailed → nouveau flux.
+    hydro.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
+    hydro.mock_state(hass, ConfigEntryState.SETUP_ERROR)
+    await async_open_reauth(hass, hydro)
+    await renewer.async_check()
+    await _settle(hass)
+
+    assert results == ["success"]
+    assert behavior.passwords == [HQ_PASSWORD]
+    assert _lock_state(hass_storage, hydro.entry_id)["state"] == "succeeded"
+
+
+async def test_success_then_loaded_rearms(
+    hass, hydro, behavior, imap, make_renewer, results, hass_storage
+):
+    _mail_on_password(behavior, imap)
+    await async_open_reauth(hass, hydro)
+    renewer = make_renewer()
+    await renewer.async_start()
+    await _settle(hass)
+    assert results == ["success"]
+    assert _lock_state(hass_storage, hydro.entry_id)["state"] == "succeeded"
+
+    hydro.mock_state(hass, ConfigEntryState.LOADED)
+    await _settle(hass)
+    assert _lock_state(hass_storage, hydro.entry_id)["state"] == "armed"
+
+    await async_open_reauth(hass, hydro)
+    await renewer.async_check()
+    await _settle(hass)
+    assert results == ["success", "success"]
+    assert behavior.passwords == [HQ_PASSWORD, HQ_PASSWORD]
+
+
+async def test_loaded_during_attempt_ends_armed(
+    hass, hydro, behavior, imap, make_renewer, results, hass_storage
+):
+    def on_password() -> None:
+        imap.add(hq_message(HQ_CODE))
+        # Le rechargement hydroqc atteint LOADED avant l'écriture finale de la tentative.
+        hydro.mock_state(hass, ConfigEntryState.LOADED)
+
+    behavior.on_password = on_password
+    await async_open_reauth(hass, hydro)
+    await make_renewer().async_start()
+    await _settle(hass)
+
+    assert results == ["success"]
+    assert _lock_state(hass_storage, hydro.entry_id)["state"] == "armed"
+    assert not _notified(hass)
+
+
 async def test_ignores_flow_at_mfa_step(hass, hydro, behavior, imap, make_renewer, results):
     flow_id = await async_open_reauth(hass, hydro)
     result = await hass.config_entries.flow.async_configure(flow_id, {"password": HQ_PASSWORD})
@@ -444,6 +509,8 @@ async def test_no_secrets_in_logs(
     await renewer.async_start()
     await _settle(hass)
     assert results == ["success"]
+    hydro.mock_state(hass, ConfigEntryState.LOADED)
+    await _settle(hass)
 
     # Deuxième tentative, refusée : le code soumis ne correspond pas.
     behavior.code = "654321"

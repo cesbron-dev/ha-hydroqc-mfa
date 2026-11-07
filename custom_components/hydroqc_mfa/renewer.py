@@ -75,6 +75,8 @@ class Renewer:
         self._guards: dict[str, asyncio.Lock] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._watched: dict[str, CALLBACK_TYPE] = {}
+        self._attempting: set[str] = set()
+        self._loaded_during_attempt: set[str] = set()
         self._unsub_interval: CALLBACK_TYPE | None = None
         self._installed_filter = False
         self._stopping = False
@@ -147,16 +149,24 @@ class Renewer:
     async def async_renew(self, flow_id: str, hydro_entry_id: str) -> str:
         """Une tentative complète ; renvoie `success` ou une raison d'échec."""
         token = _ATTEMPT_ACTIVE.set(True)
+        self._attempting.add(hydro_entry_id)
+        self._loaded_during_attempt.discard(hydro_entry_id)
         try:
             await self._lock.async_begin(hydro_entry_id)
             reason = await self._async_attempt(flow_id, hydro_entry_id)
+            # Jamais de réarmement sur le seul succès du flux : le rechargement qui suit
+            # peut encore échouer et rouvrir un flux ; seul `LOADED` réarme.
             if reason == SUCCESS:
-                await self._lock.async_arm(hydro_entry_id)
+                await self._lock.async_succeed(hydro_entry_id)
                 await async_clear_failure(self.hass)
             else:
                 await self._lock.async_fail(hydro_entry_id, reason)
                 await async_notify_failure(self.hass, self._notify_service, reason)
+            if hydro_entry_id in self._loaded_during_attempt:
+                await self._async_rearm(hydro_entry_id)
         finally:
+            self._attempting.discard(hydro_entry_id)
+            self._loaded_during_attempt.discard(hydro_entry_id)
             _ATTEMPT_ACTIVE.reset(token)
         async_dispatcher_send(self.hass, SIGNAL_RESULT, reason, dt_util.utcnow())
         return reason
@@ -248,16 +258,30 @@ class Renewer:
     def _async_hydro_state_changed(self, hydro: ConfigEntry) -> None:
         if self._stopping:
             return
+        # État lu au moment de la transition, pas quand la tâche s'exécutera.
+        loaded = hydro.state is ConfigEntryState.LOADED
+        if loaded and hydro.entry_id in self._attempting:
+            # La tentative réarmera après son écriture finale, qui écraserait sinon `armed`.
+            self._loaded_during_attempt.add(hydro.entry_id)
         self._entry.async_create_task(
-            self.hass, self._async_on_hydro_state(hydro), f"{self._entry.domain} hydroqc state"
+            self.hass,
+            self._async_on_hydro_state(hydro.entry_id, loaded),
+            f"{self._entry.domain} hydroqc state",
         )
 
-    async def _async_on_hydro_state(self, hydro: ConfigEntry) -> None:
+    async def _async_on_hydro_state(self, hydro_entry_id: str, loaded: bool) -> None:
         """`LOADED` = session hydroqc fonctionnelle : réarme et efface l'alerte."""
-        if hydro.state is ConfigEntryState.LOADED and not self._lock.is_armed(hydro.entry_id):
-            await self._lock.async_arm(hydro.entry_id)
-            await async_clear_failure(self.hass)
+        if (
+            loaded
+            and hydro_entry_id not in self._attempting
+            and not self._lock.is_armed(hydro_entry_id)
+        ):
+            await self._async_rearm(hydro_entry_id)
         await self.async_check()
+
+    async def _async_rearm(self, hydro_entry_id: str) -> None:
+        await self._lock.async_arm(hydro_entry_id)
+        await async_clear_failure(self.hass)
 
     async def _async_periodic(self, _now: datetime) -> None:
         await self.async_check()

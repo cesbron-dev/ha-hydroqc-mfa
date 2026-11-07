@@ -11,6 +11,7 @@ STORAGE_VERSION = 1
 ARMED = "armed"
 IN_PROGRESS = "in_progress"
 FAILED = "failed"
+SUCCEEDED = "succeeded"
 
 
 class RenewalLock:
@@ -46,6 +47,10 @@ class RenewalLock:
 
     async def async_fail(self, entry_id: str, reason: str) -> None:
         await self._set(entry_id, FAILED, reason)
+
+    async def async_succeed(self, entry_id: str) -> None:
+        """Succès du flux : reste désarmé jusqu'au retour de l'entrée à `LOADED`."""
+        await self._set(entry_id, SUCCEEDED, None)
 
     async def async_arm(self, entry_id: str) -> None:
         await self._set(entry_id, ARMED, None)

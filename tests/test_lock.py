@@ -62,3 +62,25 @@ async def test_begin_is_persisted_before_return(hass, hass_storage):
     await lock.async_begin("abc")
     data = await Store(hass, 1, KEY).async_load()
     assert data["abc"]["state"] == "in_progress"
+
+
+async def test_succeeded_is_not_armed(hass, hass_storage):
+    lock = RenewalLock(hass)
+    await lock.async_load()
+    await lock.async_begin("abc")
+    await lock.async_succeed("abc")
+    assert not lock.is_armed("abc")
+    assert hass_storage[KEY]["data"]["abc"] == {"state": "succeeded", "reason": None}
+
+
+async def test_startup_succeeded_stays_not_armed(hass, hass_storage):
+    hass_storage[KEY] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": KEY,
+        "data": {"abc": {"state": "succeeded", "reason": None}},
+    }
+    lock = RenewalLock(hass)
+    assert await lock.async_load() == []
+    assert not lock.is_armed("abc")
+    assert hass_storage[KEY]["data"]["abc"] == {"state": "succeeded", "reason": None}
