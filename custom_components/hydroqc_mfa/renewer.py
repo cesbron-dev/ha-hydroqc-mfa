@@ -191,7 +191,9 @@ class Renewer:
             result = await flow_manager.async_configure(flow_id, {"password": password})
             if _is_success(result):
                 return SUCCESS
-            if _is_form(result, "reauth_confirm") and result.get("errors"):
+            if _is_form(result, "reauth_confirm") and result.get("errors") == {
+                "base": "invalid_auth"
+            }:
                 return "password_rejected"
             if not _is_form(result, "mfa") or result.get("errors"):
                 return "unexpected_form"

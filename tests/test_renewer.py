@@ -211,6 +211,23 @@ async def test_password_rejected(
     assert _notified(hass)
 
 
+@pytest.mark.parametrize(
+    "error", ["cannot_connect", "portal_unavailable", "portal_maintenance", "no_contracts"]
+)
+async def test_other_reauth_confirm_error_is_unexpected_form(
+    hass, hydro, behavior, imap, make_renewer, results, hass_storage, error
+):
+    behavior.password = "autre"
+    behavior.password_error = error
+    await async_open_reauth(hass, hydro)
+    await make_renewer().async_start()
+    await _settle(hass)
+
+    assert results == ["unexpected_form"]
+    assert _lock_state(hass_storage, hydro.entry_id)["reason"] == "unexpected_form"
+    assert _notified(hass)
+
+
 async def test_unexpected_form_after_password(
     hass, hydro, behavior, imap, make_renewer, results
 ):

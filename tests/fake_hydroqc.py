@@ -27,6 +27,7 @@ class HydroBehavior:
     """Comportement paramétrable du faux flux et compteurs d'appels."""
 
     password: str = HQ_PASSWORD
+    password_error: str = "invalid_auth"
     code: str = HQ_CODE
     abort_after_password: bool = False
     unexpected_step_after_password: bool = False
@@ -63,7 +64,9 @@ class FakeHydroFlow(ConfigFlow):
             raise RuntimeError(f"échec réseau {user_input['password']}")
         if user_input["password"] != behavior.password:
             return self.async_show_form(
-                step_id="reauth_confirm", data_schema=schema, errors={"base": "invalid_auth"}
+                step_id="reauth_confirm",
+                data_schema=schema,
+                errors={"base": behavior.password_error},
             )
         if behavior.abort_after_password:
             return self.async_abort(reason="reauth_successful")
