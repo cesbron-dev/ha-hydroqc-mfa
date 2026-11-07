@@ -55,6 +55,24 @@ def test_extract_code_ambiguous():
     assert "ambiguous" in REASON_MESSAGES
 
 
+@pytest.mark.parametrize(
+    ("username", "password"),
+    [("olivier@gmail.com", "mötdepässe"), ("éloïse@gmail.com", PASSWORD)],
+)
+def test_connect_non_ascii_credentials(username, password):
+    fake = FakeImap()
+    with (
+        patch("custom_components.hydroqc_mfa.gmail.imaplib.IMAP4_SSL", new=fake),
+        pytest.raises(GmailError) as err,
+    ):
+        GmailInbox(username, password).connect()
+    assert err.value.reason == "gmail_auth_failed"
+    assert str(err.value) == "gmail_auth_failed"
+    assert err.value.__cause__ is None
+    assert err.value.__suppress_context__
+    assert fake.logged_out
+
+
 def test_connect_bad_password():
     fake = FakeImap(password="other")
     with pytest.raises(GmailError) as err:

@@ -126,7 +126,9 @@ class GmailInbox:
         except GmailError:
             self.close()
             raise
-        except imaplib.IMAP4.error:
+        except (imaplib.IMAP4.error, ValueError):
+            # ValueError couvre UnicodeEncodeError : imaplib encode en ASCII, un identifiant
+            # accentué est refusé localement et le message cite le caractère fautif.
             self.close()
             raise GmailError("gmail_auth_failed") from None
         except (OSError, TimeoutError):

@@ -69,6 +69,9 @@ class FakeImap:
 
     def login(self, user: str, password: str):
         self.commands.append("LOGIN")
+        # Comme imaplib : les arguments sont encodés en ASCII avant l'envoi.
+        user.encode("ascii")
+        password.encode("ascii")
         if password != self.password:
             raise imaplib.IMAP4.error(f"[AUTHENTICATIONFAILED] {password} refused")
         return "OK", [b"logged in"]
