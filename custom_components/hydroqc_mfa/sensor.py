@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
+from . import HydroqcMfaConfigEntry
 from .const import DOMAIN, REASON_MESSAGES, SIGNAL_RESULT
 
 SUCCESS = "success"
@@ -28,7 +29,7 @@ class _HydroqcMfaSensor(SensorEntity, RestoreEntity):
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_translation_key = key
         # Les identifiants d'entité restent en français quelle que soit la langue.
-        self.internal_integration_suggested_object_id = object_id
+        self.entity_id = f"sensor.{object_id}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry_id)},
             name="Hydroqc MFA",
@@ -60,7 +61,8 @@ class LastRenewalSensor(_HydroqcMfaSensor):
         super().__init__(entry_id, "last_renewal", "hydroqc_mfa_dernier_renouvellement")
 
     def _restore(self, state: str) -> None:
-        self._attr_native_value = dt_util.parse_datetime(state)
+        parsed = dt_util.parse_datetime(state)
+        self._attr_native_value = dt_util.as_utc(parsed) if parsed else None
 
     @callback
     def _handle_result(self, reason: str, when: datetime) -> None:
@@ -89,7 +91,7 @@ class LastAttemptSensor(_HydroqcMfaSensor):
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: HydroqcMfaConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Crée les deux capteurs."""
     async_add_entities([LastRenewalSensor(entry.entry_id), LastAttemptSensor(entry.entry_id)])
