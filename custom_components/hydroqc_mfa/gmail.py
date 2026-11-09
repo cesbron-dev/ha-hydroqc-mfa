@@ -23,11 +23,25 @@ MAX_CANDIDATES = 50
 
 
 class GmailError(Exception):
-    """Porte une raison fixe (clé de REASON_MESSAGES), jamais de contenu serveur."""
+    """Porte une raison fixe (clé de REASON_MESSAGES), jamais de contenu serveur.
 
-    def __init__(self, reason: str) -> None:
+    `detail` dit à quelle étape et avec quel type d'exception l'échec a eu lieu, pour le
+    journal : jamais le message de l'exception ni une réponse du serveur, qui pourraient
+    contenir l'adresse, le mot de passe ou un code.
+    """
+
+    def __init__(self, reason: str, detail: str = "") -> None:
         super().__init__(reason)
         self.reason = reason
+        self.detail = detail
+
+
+def _kind(err: BaseException) -> str:
+    """Nom qualifié du type d'exception (ex. `socket.gaierror`), sans son message."""
+    kind = type(err)
+    if kind.__module__ == "builtins":
+        return kind.__qualname__
+    return f"{kind.__module__}.{kind.__qualname__}"
 
 
 @dataclass(frozen=True)
@@ -93,8 +107,8 @@ def extract_code(raw: bytes) -> str | None:
                 parser.feed(text)
                 text = "".join(parser.parts)
             codes.update(re.findall(r"(?<!\w)[0-9]{6}(?!\w)", text))
-    except (ValueError, LookupError, UnicodeError, AssertionError):
-        raise GmailError("gmail_unavailable") from None
+    except (ValueError, LookupError, UnicodeError, AssertionError) as err:
+        raise GmailError("gmail_unavailable", f"lecture du message : {_kind(err)}") from None
     if len(codes) > 1:
         raise GmailError("ambiguous")
     return next(iter(codes), None)
@@ -122,18 +136,18 @@ class GmailInbox:
             )
             status, _ = self._client.login(self._username, self._password)
             if status != "OK":
-                raise GmailError("gmail_auth_failed")
+                raise GmailError("gmail_auth_failed", "connexion : identifiants refusés")
         except GmailError:
             self.close()
             raise
-        except (imaplib.IMAP4.error, ValueError):
+        except (imaplib.IMAP4.error, ValueError) as err:
             # ValueError couvre UnicodeEncodeError : imaplib encode en ASCII, un identifiant
             # accentué est refusé localement et le message cite le caractère fautif.
             self.close()
-            raise GmailError("gmail_auth_failed") from None
-        except (OSError, TimeoutError):
+            raise GmailError("gmail_auth_failed", f"connexion : {_kind(err)}") from None
+        except (OSError, TimeoutError) as err:
             self.close()
-            raise GmailError("gmail_unavailable") from None
+            raise GmailError("gmail_unavailable", f"connexion : {_kind(err)}") from None
 
     def checkpoint(self) -> None:
         """Mémorise UIDVALIDITY/UIDNEXT avant de demander un nouveau code."""
@@ -143,12 +157,14 @@ class GmailInbox:
             validity = client.response("UIDVALIDITY")[1]
             next_uid = client.response("UIDNEXT")[1]
             if not validity or not validity[0] or not next_uid or not next_uid[0]:
-                raise GmailError("gmail_unavailable")
+                raise GmailError(
+                    "gmail_unavailable", "point de départ : UIDVALIDITY ou UIDNEXT absent"
+                )
             self._validity = validity[0]
             self._minimum_uid = int(next_uid[0])
             self._examined.clear()
-        except (imaplib.IMAP4.error, OSError, ValueError, TypeError):
-            raise GmailError("gmail_unavailable") from None
+        except (imaplib.IMAP4.error, OSError, ValueError, TypeError) as err:
+            raise GmailError("gmail_unavailable", f"point de départ : {_kind(err)}") from None
 
     def poll(self) -> GmailCode | None:
         """Lit uniquement les nouveaux messages candidats, même déjà marqués lus."""
@@ -166,7 +182,7 @@ class GmailInbox:
                 if int(value) >= self._minimum_uid and int(value) not in self._examined
             ]
             if len(uids) > MAX_CANDIDATES:
-                raise GmailError("gmail_unavailable")
+                raise GmailError("gmail_unavailable", "lecture : trop de messages candidats")
             matches: list[GmailCode] = []
             for uid in uids:
                 self._examined.add(uid)
@@ -179,15 +195,15 @@ class GmailInbox:
                         continue
                     raw = item[1]
                     if len(raw) > MAX_MESSAGE_BYTES:
-                        raise GmailError("gmail_unavailable")
+                        raise GmailError("gmail_unavailable", "lecture : message trop volumineux")
                     code = extract_code(raw)
                     if code:
                         matches.append(GmailCode(uid, self._validity, code))
             if len({match.code for match in matches}) > 1:
                 raise GmailError("ambiguous")
             return matches[-1] if matches else None
-        except (imaplib.IMAP4.error, OSError, ValueError, TypeError, IndexError):
-            raise GmailError("gmail_unavailable") from None
+        except (imaplib.IMAP4.error, OSError, ValueError, TypeError, IndexError) as err:
+            raise GmailError("gmail_unavailable", f"lecture : {_kind(err)}") from None
 
     def trash(self, receipt: GmailCode) -> None:
         """Met à la corbeille exactement le message accepté ; jamais d'EXPUNGE."""
@@ -196,12 +212,12 @@ class GmailInbox:
             self._check(client.select("INBOX", readonly=False)[0])
             validity = client.response("UIDVALIDITY")[1]
             if not validity or validity[0] != receipt.validity:
-                raise GmailError("gmail_unavailable")
+                raise GmailError("gmail_unavailable", "corbeille : UIDVALIDITY changé")
             # Libellé système Gmail, indépendant de la langue : ni DELETE ni EXPUNGE.
             status, _ = client.uid("STORE", str(receipt.uid), "+X-GM-LABELS", r"(\Trash)")
             self._check(status)
-        except (imaplib.IMAP4.error, OSError, ValueError, TypeError):
-            raise GmailError("gmail_unavailable") from None
+        except (imaplib.IMAP4.error, OSError, ValueError, TypeError) as err:
+            raise GmailError("gmail_unavailable", f"corbeille : {_kind(err)}") from None
 
     def close(self) -> None:
         """Ferme sans EXPUNGE ; n'inclut jamais de réponse serveur dans les erreurs."""
@@ -212,13 +228,13 @@ class GmailInbox:
 
     def _connection(self) -> imaplib.IMAP4_SSL:
         if self._client is None:
-            raise GmailError("gmail_unavailable")
+            raise GmailError("gmail_unavailable", "connexion IMAP absente")
         return self._client
 
     @staticmethod
     def _check(status: str) -> None:
         if status != "OK":
-            raise GmailError("gmail_unavailable")
+            raise GmailError("gmail_unavailable", "connexion IMAP absente")
 
 
 def validate_gmail(username: str, password: str) -> None:

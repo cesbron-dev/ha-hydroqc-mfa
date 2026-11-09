@@ -211,6 +211,12 @@ class Renewer:
                     _LOGGER.warning("Impossible de mettre le courriel du code à la corbeille")
             return SUCCESS
         except GmailError as err:
+            # Étape et type d'exception seulement : de quoi distinguer réseau et mot de passe.
+            _LOGGER.warning(
+                "Réauthentification hydroqc : Gmail en échec (%s ; %s)",
+                err.reason,
+                err.detail or "sans détail",
+            )
             return err.reason
         except Exception:  # noqa: BLE001 - jamais de détail : il peut contenir un secret
             _LOGGER.warning("Réauthentification hydroqc interrompue par une erreur inattendue")

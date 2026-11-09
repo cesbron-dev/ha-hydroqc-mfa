@@ -269,8 +269,25 @@ async def test_gmail_down_no_hydro_request(hass, hydro, behavior, make_renewer, 
     assert _notified(hass)
 
 
+async def test_gmail_down_logs_step_and_type_only(
+    hass, hydro, behavior, make_renewer, results, caplog
+):
+    def unreachable(*_args, **_kwargs):
+        raise TimeoutError("détail serveur secret")
+
+    await async_open_reauth(hass, hydro)
+    with patch("custom_components.hydroqc_mfa.gmail.imaplib.IMAP4_SSL", new=unreachable):
+        await make_renewer().async_start()
+        await _settle(hass)
+
+    assert results == ["gmail_unavailable"]
+    assert "Gmail en échec (gmail_unavailable ; connexion : TimeoutError)" in caplog.text
+    assert "détail serveur secret" not in caplog.text
+    assert HQ_PASSWORD not in caplog.text
+
+
 async def test_gmail_auth_failed_no_hydro_request(
-    hass, hydro, behavior, imap, make_renewer, results
+    hass, hydro, behavior, imap, make_renewer, results, caplog
 ):
     imap.password = "autre"
     await async_open_reauth(hass, hydro)
@@ -279,6 +296,8 @@ async def test_gmail_auth_failed_no_hydro_request(
 
     assert results == ["gmail_auth_failed"]
     assert behavior.passwords == []
+    assert "Gmail en échec (gmail_auth_failed ; connexion : " in caplog.text
+    assert "autre" not in caplog.text
 
 
 async def test_flow_exception_is_unexpected(

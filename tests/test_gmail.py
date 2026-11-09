@@ -91,6 +91,20 @@ def test_connect_network_failure_is_unavailable():
         with pytest.raises(GmailError) as err:
             GmailInbox("u", "p").connect()
     assert err.value.reason == "gmail_unavailable"
+    assert err.value.detail == "connexion : OSError"
+    assert "down" not in err.value.detail
+
+
+def test_connect_dns_failure_detail_names_module_type():
+    import socket
+
+    def boom(*args, **kwargs):
+        raise socket.gaierror("imap.gmail.com introuvable")
+
+    with patch("custom_components.hydroqc_mfa.gmail.imaplib.IMAP4_SSL", new=boom):
+        with pytest.raises(GmailError) as err:
+            GmailInbox("u", "p").connect()
+    assert err.value.detail == "connexion : socket.gaierror"
 
 
 def test_connect_uses_verified_tls_and_timeout():
