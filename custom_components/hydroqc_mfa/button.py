@@ -18,17 +18,20 @@ from .const import (
     CONF_GMAIL_APP_PASSWORD,
     CONF_GMAIL_USERNAME,
     DOMAIN,
+    GMAIL_TEST_NO_HQ_MAIL,
     GMAIL_TEST_OK,
     REASON_MESSAGES,
     SIGNAL_GMAIL_TEST,
 )
-from .gmail import GmailError, validate_gmail
+from .gmail import GmailError, survey_gmail
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class TestGmailButton(ButtonEntity):
-    """Se connecte à Gmail et ouvre INBOX, comme à la création ; ne lit aucun message.
+    """Se connecte à Gmail, ouvre INBOX et compte les courriels de code Hydro-Québec.
+
+    Ne lit que le sujet et la date de réception de ces courriels : aucun corps, aucun code.
 
     N'agit ni sur le verrou anti-relance ni sur les capteurs de renouvellement : le
     résultat va au capteur « Test Gmail ».
@@ -52,18 +55,23 @@ class TestGmailButton(ButtonEntity):
         username = self._entry.data[CONF_GMAIL_USERNAME]
         password = self._entry.data[CONF_GMAIL_APP_PASSWORD]
         try:
-            await self.hass.async_add_executor_job(validate_gmail, username, password)
+            survey = await self.hass.async_add_executor_job(survey_gmail, username, password)
         except GmailError as err:
             reason, detail = err.reason, err.detail
         except Exception as err:  # noqa: BLE001 - type seulement : le message peut contenir un secret
             reason, detail = "unexpected", type(err).__name__
         else:
-            async_dispatcher_send(self.hass, SIGNAL_GMAIL_TEST, GMAIL_TEST_OK, "", dt_util.utcnow())
+            result = GMAIL_TEST_OK if survey.hq_messages else GMAIL_TEST_NO_HQ_MAIL
+            async_dispatcher_send(
+                self.hass, SIGNAL_GMAIL_TEST, result, "", dt_util.utcnow(), survey
+            )
             return
         _LOGGER.warning(
             "Test de connexion Gmail en échec (%s ; %s)", reason, detail or "sans détail"
         )
-        async_dispatcher_send(self.hass, SIGNAL_GMAIL_TEST, reason, detail, dt_util.utcnow())
+        async_dispatcher_send(
+            self.hass, SIGNAL_GMAIL_TEST, reason, detail, dt_util.utcnow(), None
+        )
         raise HomeAssistantError(
             translation_domain=DOMAIN,
             translation_key="gmail_test_failed",

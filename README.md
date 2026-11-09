@@ -61,14 +61,24 @@ Les deux conservent leur valeur après un redémarrage.
 ## Tester la connexion Gmail
 
 Le bouton `button.hydroqc_mfa_tester_gmail` (section « Diagnostic » de l'appareil) se connecte à
-Gmail et ouvre la boîte de réception, comme à la création de l'intégration. Il ne lit aucun
-message, ne demande rien à Hydro-Québec et ne touche ni au verrou anti-relance ni aux deux
-capteurs ci-dessus.
+Gmail et ouvre la boîte de réception, comme à la création de l'intégration, puis y cherche les
+courriels de code d'Hydro-Québec (même expéditeur et même sujet que ci-dessus, parmi les 50 plus
+récents de l'expéditeur). De ces courriels, il ne lit que le sujet et la date de réception : aucun
+contenu, aucun code, rien n'est marqué comme lu ni déplacé. Il ne demande rien à Hydro-Québec et
+ne touche ni au verrou anti-relance ni aux deux capteurs ci-dessus.
 
-Le résultat va dans `sensor.hydroqc_mfa_test_gmail` (« Connexion OK », « Gmail inaccessible »,
-« Connexion Gmail refusée » ou « Erreur inattendue »), avec les attributs `detail` (étape et type
-d'erreur, par exemple `connexion : socket.gaierror`) et `tested_at`. En cas d'échec, un message
-s'affiche aussi dans l'interface et une ligne est écrite dans le journal.
+Le résultat va dans `sensor.hydroqc_mfa_test_gmail` :
+
+- « Connexion OK » : accès à la boîte validé et au moins un courriel de code trouvé ;
+- « Connexion OK, aucun courriel Hydro-Québec » : accès validé, mais aucun courriel de code dans
+  la boîte de réception. Ce n'est pas un échec : avec la mise à la corbeille activée, chaque
+  courriel utilisé quitte la boîte de réception ;
+- « Gmail inaccessible », « Connexion Gmail refusée » ou « Erreur inattendue » en cas d'échec.
+
+Attributs : `hq_messages` (nombre de courriels de code trouvés), `hq_last_received` (date de
+réception du plus récent), `detail` (étape et type d'erreur, par exemple
+`connexion : socket.gaierror`) et `tested_at`. En cas d'échec, un message s'affiche aussi dans
+l'interface et une ligne est écrite dans le journal.
 
 Comme pour les tentatives, le journal ne contient jamais le message de l'erreur ni une réponse du
 serveur : seulement l'étape et le type d'exception, de quoi distinguer un problème réseau

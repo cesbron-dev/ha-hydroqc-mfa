@@ -8,6 +8,7 @@ import ssl
 import unicodedata
 from contextlib import suppress
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
@@ -51,6 +52,47 @@ class GmailCode:
     uid: int
     validity: bytes
     code: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class HqMailSurvey:
+    """Courriels de code Hydro-Québec présents dans INBOX (métadonnées seulement)."""
+
+    hq_messages: int
+    hq_last_received: datetime | None
+
+
+_MONTHS = {
+    name: index
+    for index, name in enumerate(
+        ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
+        start=1,
+    )
+}
+_INTERNALDATE = re.compile(
+    rb'INTERNALDATE "\s?(\d{1,2})-([A-Za-z]{3})-(\d{4}) '
+    rb'(\d{2}):(\d{2}):(\d{2}) ([+-])(\d{2})(\d{2})"'
+)
+
+
+def _internaldate(meta: bytes) -> datetime | None:
+    """Lit INTERNALDATE sans dépendre de la locale (contrairement à strptime %b)."""
+    found = _INTERNALDATE.search(meta)
+    if found is None:
+        return None
+    day, month, year, hour, minute, second, sign, off_h, off_m = found.groups()
+    if month.decode().title() not in _MONTHS:
+        return None
+    offset = timedelta(hours=int(off_h), minutes=int(off_m))
+    return datetime(
+        int(year),
+        _MONTHS[month.decode().title()],
+        int(day),
+        int(hour),
+        int(minute),
+        int(second),
+        tzinfo=timezone(offset if sign == b"+" else -offset),
+    )
 
 
 class _VisibleText(HTMLParser):
@@ -219,6 +261,42 @@ class GmailInbox:
         except (imaplib.IMAP4.error, OSError, ValueError, TypeError) as err:
             raise GmailError("gmail_unavailable", f"corbeille : {_kind(err)}") from None
 
+    def survey(self) -> HqMailSurvey:
+        """Compte les courriels de code dans INBOX ; ne lit que sujet et date de réception.
+
+        Limité aux `MAX_CANDIDATES` plus récents de l'expéditeur. `BODY.PEEK` : rien n'est
+        marqué comme lu ; aucun corps n'est téléchargé, aucun code n'est extrait.
+        """
+        client = self._connection()
+        try:
+            status, data = client.uid("SEARCH", "UID", "1:*", "FROM", f'"{SENDER}"')
+            self._check(status)
+            uids = sorted({int(value) for value in (data[0] or b"").split()})[-MAX_CANDIDATES:]
+            count = 0
+            latest: datetime | None = None
+            for uid in uids:
+                status, fetched = client.uid(
+                    "FETCH", str(uid), "(INTERNALDATE BODY.PEEK[HEADER.FIELDS (SUBJECT)])"
+                )
+                self._check(status)
+                for item in fetched:
+                    if not isinstance(item, tuple):
+                        continue
+                    header = BytesParser(policy=policy.default).parsebytes(
+                        item[1], headersonly=True
+                    )
+                    if _normalize(str(header["Subject"] or "")) != _normalize(SUBJECT):
+                        continue
+                    count += 1
+                    received = _internaldate(item[0])
+                    if received is not None and (latest is None or received > latest):
+                        latest = received
+            return HqMailSurvey(count, latest)
+        except GmailError:
+            raise
+        except (imaplib.IMAP4.error, OSError, ValueError, TypeError, IndexError) as err:
+            raise GmailError("gmail_unavailable", f"recherche : {_kind(err)}") from None
+
     def close(self) -> None:
         """Ferme sans EXPUNGE ; n'inclut jamais de réponse serveur dans les erreurs."""
         client, self._client = self._client, None
@@ -243,5 +321,16 @@ def validate_gmail(username: str, password: str) -> None:
     try:
         inbox.connect()
         inbox.checkpoint()
+    finally:
+        inbox.close()
+
+
+def survey_gmail(username: str, password: str) -> HqMailSurvey:
+    """Comme `validate_gmail`, puis compte les courriels de code Hydro-Québec dans INBOX."""
+    inbox = GmailInbox(username, password)
+    try:
+        inbox.connect()
+        inbox.checkpoint()
+        return inbox.survey()
     finally:
         inbox.close()

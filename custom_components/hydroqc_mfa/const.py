@@ -17,6 +17,8 @@ NETWORK_TIMEOUT = 10
 SIGNAL_RESULT = "hydroqc_mfa_result"
 SIGNAL_GMAIL_TEST = "hydroqc_mfa_gmail_test"
 GMAIL_TEST_OK = "ok"
+# Connexion OK, mais aucun courriel de code Hydro-Québec dans INBOX : pas un échec.
+GMAIL_TEST_NO_HQ_MAIL = "no_hq_mail"
 
 REASON_MESSAGES: dict[str, str] = {
     "code_timeout": "code non reçu en 10 minutes",

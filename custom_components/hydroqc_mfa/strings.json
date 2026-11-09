@@ -67,6 +67,7 @@
         "name": "Gmail test",
         "state": {
           "ok": "Connection OK",
+          "no_hq_mail": "Connection OK, no Hydro-Québec email",
           "gmail_unavailable": "Gmail unreachable",
           "gmail_auth_failed": "Gmail sign-in rejected",
           "unexpected": "Unexpected error"

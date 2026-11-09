@@ -10,6 +10,7 @@ from custom_components.hydroqc_mfa.gmail import (
     GmailError,
     GmailInbox,
     extract_code,
+    survey_gmail,
     validate_gmail,
 )
 
@@ -207,3 +208,59 @@ def test_validate_gmail_connects_checks_and_closes():
     with patch("custom_components.hydroqc_mfa.gmail.imaplib.IMAP4_SSL", new=FakeImap(password="x")):
         with pytest.raises(GmailError):
             validate_gmail("olivier@gmail.com", PASSWORD)
+
+
+IMAP = "custom_components.hydroqc_mfa.gmail.imaplib.IMAP4_SSL"
+
+
+def test_survey_counts_hq_code_messages_without_reading_bodies():
+    fake = FakeImap()
+    first = fake.add(hq_message("111111"))
+    fake.add(hq_message("222222", subject="Votre facture Hydro-Québec"))
+    last = fake.add(hq_message("333333"))
+    fake.dates[first] = "07-Nov-2026 09:15:00 -0500"
+    fake.dates[last] = "08-Nov-2026 19:52:30 -0500"
+    with patch(IMAP, new=fake):
+        survey = survey_gmail("olivier@gmail.com", PASSWORD)
+
+    assert survey.hq_messages == 2
+    assert survey.hq_last_received is not None
+    assert survey.hq_last_received.isoformat() == "2026-11-08T19:52:30-05:00"
+    assert fake.logged_out
+    fetches = [c for c in fake.commands if c.startswith("FETCH")]
+    assert fetches
+    assert all("BODY.PEEK[HEADER.FIELDS (SUBJECT)]" in c and "INTERNALDATE" in c for c in fetches)
+    assert not any(c.startswith("STORE") for c in fake.commands)
+    assert "SELECT INBOX readonly=True" in fake.commands
+
+
+def test_survey_empty_inbox():
+    with patch(IMAP, new=FakeImap()):
+        survey = survey_gmail("olivier@gmail.com", PASSWORD)
+    assert survey.hq_messages == 0
+    assert survey.hq_last_received is None
+
+
+def test_survey_examines_only_most_recent_candidates():
+    fake = FakeImap()
+    for _ in range(60):
+        fake.add(hq_message("111111"))
+    with patch(IMAP, new=fake):
+        survey = survey_gmail("olivier@gmail.com", PASSWORD)
+    assert survey.hq_messages == 50
+    assert len([c for c in fake.commands if c.startswith("FETCH")]) == 50
+
+
+def test_survey_search_failure_is_unavailable_with_step():
+    fake = FakeImap()
+    fake.add(hq_message("111111"))
+
+    def broken(command, *args):
+        raise OSError("socket fermé : secret")
+
+    fake.uid = broken
+    with patch(IMAP, new=fake), pytest.raises(GmailError) as err:
+        survey_gmail("olivier@gmail.com", PASSWORD)
+    assert err.value.reason == "gmail_unavailable"
+    assert err.value.detail == "recherche : OSError"
+    assert fake.logged_out

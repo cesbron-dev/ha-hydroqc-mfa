@@ -10,7 +10,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, mock_r
 
 from custom_components.hydroqc_mfa.const import DOMAIN
 
-from .fake_imap import PASSWORD, FakeImap
+from .fake_imap import PASSWORD, FakeImap, hq_message
 
 BUTTON = "button.hydroqc_mfa_tester_gmail"
 RESULT = "sensor.hydroqc_mfa_test_gmail"
@@ -34,8 +34,10 @@ async def _press(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
 
-async def test_press_success_reports_ok(hass: HomeAssistant) -> None:
+async def test_press_success_with_hq_mail_reports_ok(hass: HomeAssistant) -> None:
     fake = FakeImap()
+    uid = fake.add(hq_message("123456"))
+    fake.dates[uid] = "08-Nov-2026 19:52:30 -0500"
     with patch(IMAP, new=fake):
         await _setup(hass)
         await _press(hass)
@@ -44,9 +46,28 @@ async def test_press_success_reports_ok(hass: HomeAssistant) -> None:
     assert state.state == "ok"
     assert state.attributes["detail"] == ""
     assert state.attributes["tested_at"]
+    assert state.attributes["hq_messages"] == 1
+    assert state.attributes["hq_last_received"] == "2026-11-08T19:52:30-05:00"
     assert fake.logged_out
-    # Le test ne lit aucun message et ne touche pas au suivi des renouvellements.
-    assert not any(c.startswith(("FETCH", "STORE")) for c in fake.commands)
+    # Seuls le sujet et la date sont lus ; rien n'est modifié ni extrait.
+    fetches = [c for c in fake.commands if c.startswith("FETCH")]
+    assert fetches
+    assert all("BODY.PEEK[HEADER.FIELDS (SUBJECT)]" in c for c in fetches)
+    assert not any(c.startswith("STORE") for c in fake.commands)
+    assert "123456" not in str(state.attributes)
+    assert hass.states.get(ATTEMPT).state == "unknown"
+
+
+async def test_press_success_without_hq_mail_reports_distinct_state(hass: HomeAssistant) -> None:
+    fake = FakeImap()
+    with patch(IMAP, new=fake):
+        await _setup(hass)
+        await _press(hass)
+
+    state = hass.states.get(RESULT)
+    assert state.state == "no_hq_mail"
+    assert state.attributes["hq_messages"] == 0
+    assert state.attributes["hq_last_received"] is None
     assert hass.states.get(ATTEMPT).state == "unknown"
 
 
@@ -66,6 +87,7 @@ async def test_press_network_failure_reports_reason_and_detail(
     state = hass.states.get(RESULT)
     assert state.state == "gmail_unavailable"
     assert state.attributes["detail"] == "connexion : TimeoutError"
+    assert state.attributes["hq_messages"] is None
     assert err.value.translation_key == "gmail_test_failed"
     assert "Test de connexion Gmail en échec (gmail_unavailable ; connexion : TimeoutError)" in (
         caplog.text
@@ -94,14 +116,19 @@ async def test_result_restored_after_restart(hass: HomeAssistant) -> None:
         [
             State(
                 RESULT,
-                "gmail_unavailable",
-                {"detail": "connexion : socket.gaierror", "tested_at": "2026-11-08T19:00:54+00:00"},
+                "no_hq_mail",
+                {
+                    "detail": "",
+                    "tested_at": "2026-11-08T19:00:54+00:00",
+                    "hq_messages": 0,
+                    "hq_last_received": None,
+                },
             )
         ],
     )
     await _setup(hass)
 
     state = hass.states.get(RESULT)
-    assert state.state == "gmail_unavailable"
-    assert state.attributes["detail"] == "connexion : socket.gaierror"
+    assert state.state == "no_hq_mail"
     assert state.attributes["tested_at"] == "2026-11-08T19:00:54+00:00"
+    assert state.attributes["hq_messages"] == 0

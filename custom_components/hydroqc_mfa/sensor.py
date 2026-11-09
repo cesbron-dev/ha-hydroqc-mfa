@@ -14,7 +14,15 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from . import HydroqcMfaConfigEntry
-from .const import DOMAIN, GMAIL_TEST_OK, REASON_MESSAGES, SIGNAL_GMAIL_TEST, SIGNAL_RESULT
+from .const import (
+    DOMAIN,
+    GMAIL_TEST_NO_HQ_MAIL,
+    GMAIL_TEST_OK,
+    REASON_MESSAGES,
+    SIGNAL_GMAIL_TEST,
+    SIGNAL_RESULT,
+)
+from .gmail import HqMailSurvey
 
 SUCCESS = "success"
 RESULT_OPTIONS = [SUCCESS, *REASON_MESSAGES]
@@ -91,7 +99,14 @@ class LastAttemptSensor(_HydroqcMfaSensor):
         self.async_write_ha_state()
 
 
-GMAIL_TEST_OPTIONS = [GMAIL_TEST_OK, "gmail_unavailable", "gmail_auth_failed", "unexpected"]
+GMAIL_TEST_OPTIONS = [
+    GMAIL_TEST_OK,
+    GMAIL_TEST_NO_HQ_MAIL,
+    "gmail_unavailable",
+    "gmail_auth_failed",
+    "unexpected",
+]
+GMAIL_TEST_ATTRIBUTES = ("detail", "tested_at", "hq_messages", "hq_last_received")
 
 
 class GmailTestSensor(SensorEntity, RestoreEntity):
@@ -120,17 +135,25 @@ class GmailTestSensor(SensorEntity, RestoreEntity):
         if last is not None and last.state in GMAIL_TEST_OPTIONS:
             self._attr_native_value = last.state
             self._attr_extra_state_attributes = {
-                "detail": last.attributes.get("detail", ""),
-                "tested_at": last.attributes.get("tested_at"),
+                key: last.attributes.get(key) for key in GMAIL_TEST_ATTRIBUTES
             }
+            self._attr_extra_state_attributes["detail"] = last.attributes.get("detail", "")
         self.async_on_remove(
             async_dispatcher_connect(self.hass, SIGNAL_GMAIL_TEST, self._handle_test)
         )
 
     @callback
-    def _handle_test(self, result: str, detail: str, when: datetime) -> None:
+    def _handle_test(
+        self, result: str, detail: str, when: datetime, survey: HqMailSurvey | None
+    ) -> None:
         self._attr_native_value = result if result in GMAIL_TEST_OPTIONS else "unexpected"
-        self._attr_extra_state_attributes = {"detail": detail, "tested_at": when.isoformat()}
+        last = survey.hq_last_received if survey else None
+        self._attr_extra_state_attributes = {
+            "detail": detail,
+            "tested_at": when.isoformat(),
+            "hq_messages": survey.hq_messages if survey else None,
+            "hq_last_received": last.isoformat() if last else None,
+        }
         self.async_write_ha_state()
 
 
