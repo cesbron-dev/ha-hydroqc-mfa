@@ -62,7 +62,26 @@
           "interrupted": "Tentative interrompue (redémarrage)",
           "unexpected": "Erreur inattendue"
         }
+      },
+      "gmail_test": {
+        "name": "Test Gmail",
+        "state": {
+          "ok": "Connexion OK",
+          "gmail_unavailable": "Gmail inaccessible",
+          "gmail_auth_failed": "Connexion Gmail refusée",
+          "unexpected": "Erreur inattendue"
+        }
       }
+    },
+    "button": {
+      "test_gmail": {
+        "name": "Tester la connexion Gmail"
+      }
+    }
+  },
+  "exceptions": {
+    "gmail_test_failed": {
+      "message": "Échec du test de connexion Gmail : {reason} ({detail})"
     }
   }
 }

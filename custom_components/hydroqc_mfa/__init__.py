@@ -11,7 +11,7 @@ from .gmail import GmailInbox
 from .lock import RenewalLock
 from .renewer import Renewer
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.BUTTON, Platform.SENSOR]
 
 type HydroqcMfaConfigEntry = ConfigEntry[Renewer]
 

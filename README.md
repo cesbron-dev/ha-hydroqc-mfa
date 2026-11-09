@@ -58,6 +58,22 @@ Options : service `notify` du téléphone pour les alertes, mise à la corbeille
 
 Les deux conservent leur valeur après un redémarrage.
 
+## Tester la connexion Gmail
+
+Le bouton `button.hydroqc_mfa_tester_gmail` (section « Diagnostic » de l'appareil) se connecte à
+Gmail et ouvre la boîte de réception, comme à la création de l'intégration. Il ne lit aucun
+message, ne demande rien à Hydro-Québec et ne touche ni au verrou anti-relance ni aux deux
+capteurs ci-dessus.
+
+Le résultat va dans `sensor.hydroqc_mfa_test_gmail` (« Connexion OK », « Gmail inaccessible »,
+« Connexion Gmail refusée » ou « Erreur inattendue »), avec les attributs `detail` (étape et type
+d'erreur, par exemple `connexion : socket.gaierror`) et `tested_at`. En cas d'échec, un message
+s'affiche aussi dans l'interface et une ligne est écrite dans le journal.
+
+Comme pour les tentatives, le journal ne contient jamais le message de l'erreur ni une réponse du
+serveur : seulement l'étape et le type d'exception, de quoi distinguer un problème réseau
+(`socket.gaierror`, `TimeoutError`…) d'un mot de passe d'application refusé.
+
 ## Limites
 
 Les journaux de hydroqc-ha lui-même (notamment `hydroqc.httpclient`) échappent au contrôle de

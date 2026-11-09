@@ -15,6 +15,8 @@ CHECK_INTERVAL_SECONDS = 60
 NETWORK_TIMEOUT = 10
 
 SIGNAL_RESULT = "hydroqc_mfa_result"
+SIGNAL_GMAIL_TEST = "hydroqc_mfa_gmail_test"
+GMAIL_TEST_OK = "ok"
 
 REASON_MESSAGES: dict[str, str] = {
     "code_timeout": "code non reçu en 10 minutes",
