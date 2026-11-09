@@ -228,8 +228,8 @@ def test_survey_counts_hq_code_messages_without_reading_bodies():
     assert survey.hq_last_received.isoformat() == "2026-11-08T19:52:30-05:00"
     assert fake.logged_out
     fetches = [c for c in fake.commands if c.startswith("FETCH")]
-    assert fetches
-    assert all("BODY.PEEK[HEADER.FIELDS (SUBJECT)]" in c and "INTERNALDATE" in c for c in fetches)
+    assert len(fetches) == 1
+    assert "BODY.PEEK[HEADER.FIELDS (SUBJECT)]" in fetches[0] and "INTERNALDATE" in fetches[0]
     assert not any(c.startswith("STORE") for c in fake.commands)
     assert "SELECT INBOX readonly=True" in fake.commands
 
@@ -248,7 +248,17 @@ def test_survey_examines_only_most_recent_candidates():
     with patch(IMAP, new=fake):
         survey = survey_gmail("olivier@gmail.com", PASSWORD)
     assert survey.hq_messages == 50
-    assert len([c for c in fake.commands if c.startswith("FETCH")]) == 50
+    fetches = [c for c in fake.commands if c.startswith("FETCH")]
+    # Une seule requête groupée pour les 50 plus récents (UID 11 à 60).
+    assert len(fetches) == 1
+    assert fetches[0].split()[1] == ",".join(str(uid) for uid in range(11, 61))
+
+
+def test_survey_without_candidates_sends_no_fetch():
+    fake = FakeImap()
+    with patch(IMAP, new=fake):
+        survey_gmail("olivier@gmail.com", PASSWORD)
+    assert not any(c.startswith("FETCH") for c in fake.commands)
 
 
 def test_survey_search_failure_is_unavailable_with_step():

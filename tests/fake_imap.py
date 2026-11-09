@@ -101,26 +101,15 @@ class FakeImap:
                 hits = [max(uids)]
             return "OK", [b" ".join(str(u).encode() for u in hits)]
         if command == "FETCH":
+            if "HEADER.FIELDS" in args[1]:
+                wanted = {int(value) for value in args[0].split(",")}
+                items: list = []
+                for candidate, raw in self.messages:
+                    if candidate in wanted:
+                        items.extend(self._header_item(candidate, raw))
+                return "OK", items or [None]
             uid = int(args[0])
             for candidate, raw in self.messages:
-                if candidate == uid and "HEADER.FIELDS" in args[1]:
-                    header = raw.split(b"\n\n", 1)[0].split(b"\r\n\r\n", 1)[0]
-                    # Garde l'en-tête Subject brut, lignes de continuation comprises (RFC 5322).
-                    subject: list[bytes] = []
-                    for line in header.splitlines():
-                        if line.lower().startswith(b"subject:") or (
-                            subject and line[:1] in (b" ", b"\t")
-                        ):
-                            subject.append(line)
-                        elif subject:
-                            break
-                    data = b"\r\n".join(subject) + b"\r\n\r\n"
-                    date = self.dates.get(uid, "08-Nov-2026 14:00:54 -0500")
-                    meta = (
-                        f'{uid} (UID {uid} INTERNALDATE "{date}" '
-                        f"BODY[HEADER.FIELDS (SUBJECT)] {{{len(data)}}}"
-                    ).encode()
-                    return "OK", [(meta, data), b")"]
                 if candidate == uid:
                     meta = f"{uid} (UID {uid} BODY[]<0> {{{len(raw)}}}".encode()
                     return "OK", [(meta, raw), b")"]
@@ -128,6 +117,24 @@ class FakeImap:
         if command == "STORE":
             return "OK", [b"stored"]
         return "BAD", [b"unsupported"]
+
+    def _header_item(self, uid: int, raw: bytes) -> list:
+        """Réponse FETCH (INTERNALDATE BODY.PEEK[HEADER.FIELDS (SUBJECT)]) d'un message."""
+        header = raw.split(b"\n\n", 1)[0].split(b"\r\n\r\n", 1)[0]
+        # Garde l'en-tête Subject brut, lignes de continuation comprises (RFC 5322).
+        subject: list[bytes] = []
+        for line in header.splitlines():
+            if line.lower().startswith(b"subject:") or (subject and line[:1] in (b" ", b"\t")):
+                subject.append(line)
+            elif subject:
+                break
+        data = b"\r\n".join(subject) + b"\r\n\r\n"
+        date = self.dates.get(uid, "08-Nov-2026 14:00:54 -0500")
+        meta = (
+            f'{uid} (UID {uid} INTERNALDATE "{date}" '
+            f"BODY[HEADER.FIELDS (SUBJECT)] {{{len(data)}}}"
+        ).encode()
+        return [(meta, data), b")"]
 
     def logout(self):
         self.logged_out = True

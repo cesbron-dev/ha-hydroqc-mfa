@@ -274,23 +274,26 @@ class GmailInbox:
             uids = sorted({int(value) for value in (data[0] or b"").split()})[-MAX_CANDIDATES:]
             count = 0
             latest: datetime | None = None
-            for uid in uids:
-                status, fetched = client.uid(
-                    "FETCH", str(uid), "(INTERNALDATE BODY.PEEK[HEADER.FIELDS (SUBJECT)])"
-                )
-                self._check(status)
-                for item in fetched:
-                    if not isinstance(item, tuple):
-                        continue
-                    header = BytesParser(policy=policy.default).parsebytes(
-                        item[1], headersonly=True
-                    )
-                    if _normalize(str(header["Subject"] or "")) != _normalize(SUBJECT):
-                        continue
-                    count += 1
-                    received = _internaldate(item[0])
-                    if received is not None and (latest is None or received > latest):
-                        latest = received
+            if not uids:
+                return HqMailSurvey(0, None)
+            # Une seule requête pour tous les candidats : un aller-retour par message
+            # prenait plus d'une minute avec Gmail.
+            status, fetched = client.uid(
+                "FETCH",
+                ",".join(str(uid) for uid in uids),
+                "(INTERNALDATE BODY.PEEK[HEADER.FIELDS (SUBJECT)])",
+            )
+            self._check(status)
+            for item in fetched:
+                if not isinstance(item, tuple):
+                    continue
+                header = BytesParser(policy=policy.default).parsebytes(item[1], headersonly=True)
+                if _normalize(str(header["Subject"] or "")) != _normalize(SUBJECT):
+                    continue
+                count += 1
+                received = _internaldate(item[0])
+                if received is not None and (latest is None or received > latest):
+                    latest = received
             return HqMailSurvey(count, latest)
         except GmailError:
             raise

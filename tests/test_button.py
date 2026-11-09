@@ -51,8 +51,8 @@ async def test_press_success_with_hq_mail_reports_ok(hass: HomeAssistant) -> Non
     assert fake.logged_out
     # Seuls le sujet et la date sont lus ; rien n'est modifié ni extrait.
     fetches = [c for c in fake.commands if c.startswith("FETCH")]
-    assert fetches
-    assert all("BODY.PEEK[HEADER.FIELDS (SUBJECT)]" in c for c in fetches)
+    assert len(fetches) == 1
+    assert "BODY.PEEK[HEADER.FIELDS (SUBJECT)]" in fetches[0]
     assert not any(c.startswith("STORE") for c in fake.commands)
     assert "123456" not in str(state.attributes)
     assert hass.states.get(ATTEMPT).state == "unknown"
