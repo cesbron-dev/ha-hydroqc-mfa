@@ -2,14 +2,25 @@
 
 Intégration Home Assistant compagnon de [hydroqc-ha](https://github.com/hydroqc/hydroqc-ha). Depuis
 le 5 novembre 2026, Hydro-Québec envoie un code de vérification par courriel à chaque connexion ;
-hydroqc-ha demande donc une réauthentification manuelle environ toutes les 24 h. `hydroqc_mfa`
-fait cette réauthentification à votre place : elle remplit le flux officiel de réauthentification,
-lit le code dans Gmail et le soumet.
+quand la session expire, hydroqc-ha demande une réauthentification manuelle. `hydroqc_mfa` fait
+cette réauthentification à votre place : elle remplit le flux officiel de réauthentification, lit
+le code dans Gmail et le soumet.
+
+Combien de fois cela arrive dépend du client de connexion choisi dans hydroqc-ha (Configurer,
+Avancé, Client de connexion), disponible depuis sa version 0.9.1 :
+
+- **Application mobile** (par défaut, recommandé) : la session dure 90 jours et se prolonge à
+  chaque connexion. Une réauthentification devient rare (session expirée ou révoquée par
+  Hydro-Québec) ; `hydroqc_mfa` sert alors de filet de sécurité.
+- **Portail web** : la session dure 24 heures, donc une réauthentification par jour, que
+  `hydroqc_mfa` fait automatiquement.
+
+Changer de client demande aussi une réauthentification, que `hydroqc_mfa` prend en charge.
 
 ## Prérequis
 
 - Home Assistant 2026.11 ou plus récent.
-- [hydroqc-ha](https://github.com/hydroqc/hydroqc-ha) version 0.9.0 ou plus récente, déjà configuré.
+- [hydroqc-ha](https://github.com/hydroqc/hydroqc-ha) version 0.9.0 ou plus récente (0.9.1 recommandée pour le client mobile), déjà configuré.
 - Un compte Gmail qui reçoit les courriels d'Hydro-Québec, avec IMAP activé.
 - Un [mot de passe d'application Google](https://myaccount.google.com/apppasswords) (jamais le
   mot de passe habituel du compte).
